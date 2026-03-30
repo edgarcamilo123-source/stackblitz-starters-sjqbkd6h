@@ -3,7 +3,7 @@ import { useState } from "react";
 
 const AGENTS_INFO: Record<string, { name: string; icon: string; color: string }> = {
   scout: { name: "Scout", icon: "🔭", color: "#8B5CF6" },
-  corners: { name: "Corners", icon: "🚩", color: "#F59E0B" },
+  marcadores: { name: "Marcadores", icon: "🎯", color: "#F59E0B" },
   tarjetas: { name: "Tarjetas", icon: "🟨", color: "#EF4444" },
   disparos: { name: "Disparos", icon: "🎯", color: "#0EA5E9" },
   tactico: { name: "Táctico", icon: "📋", color: "#6366F1" },
@@ -13,7 +13,7 @@ const AGENTS_INFO: Record<string, { name: string; icon: string; color: string }>
   sintetizador: { name: "Síntesis", icon: "🧠", color: "#7C3AED" },
 };
 
-const AGENT_ORDER = ["scout", "corners", "tarjetas", "disparos", "tactico", "h2h", "esceptico", "matematico", "sintetizador"];
+const AGENT_ORDER = ["scout", "marcadores", "tarjetas", "disparos", "tactico", "h2h", "esceptico", "matematico", "sintetizador"];
 
 export default function Home() {
   const [partido, setPartido] = useState("");
@@ -58,7 +58,6 @@ export default function Home() {
             } else if (data.result) {
               setResults(prev => ({ ...prev, [data.agentId]: data.result }));
               
-              // Activar siguiente agente
               const currentIndex = AGENT_ORDER.indexOf(data.agentId);
               if (currentIndex < AGENT_ORDER.length - 1) {
                 setActiveAgent(AGENT_ORDER[currentIndex + 1]);
@@ -90,6 +89,7 @@ export default function Home() {
             <span className="text-xs font-bold text-emerald-600">APOSTALA 🇵🇾</span>
           </div>
           <h1 className="text-xl font-bold">9 Agentes en Tiempo Real</h1>
+          <p className="text-xs text-gray-500 mt-1">Incluye predicción de marcadores exactos</p>
         </div>
 
         {/* Input */}
@@ -157,8 +157,8 @@ export default function Home() {
                 const agent = AGENTS_INFO[id];
                 const result = results[id];
                 const isActive = activeAgent === id;
-                const short = result?.slice(0, 120) || "";
-                const isLong = (result?.length || 0) > 120;
+                const short = result?.slice(0, 150) || "";
+                const isLong = (result?.length || 0) > 150;
                 const isExpanded = expanded[id];
 
                 return (
@@ -217,7 +217,12 @@ export default function Home() {
           <div className="text-center py-12 text-gray-400">
             <div className="text-4xl mb-2">⚽</div>
             <p>Escribí un partido para analizar</p>
-            <p className="text-xs mt-2">9 agentes debatirán en tiempo real</p>
+            <div className="flex justify-center gap-2 mt-3 text-xs flex-wrap">
+              <span className="bg-amber-50 text-amber-600 px-2 py-1 rounded">🎯 Marcadores</span>
+              <span className="bg-red-50 text-red-600 px-2 py-1 rounded">🟨 Tarjetas</span>
+              <span className="bg-blue-50 text-blue-600 px-2 py-1 rounded">🎯 Disparos</span>
+              <span className="bg-green-50 text-green-600 px-2 py-1 rounded">🧮 EV/Kelly</span>
+            </div>
           </div>
         )}
 
