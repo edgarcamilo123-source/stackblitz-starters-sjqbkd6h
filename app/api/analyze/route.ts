@@ -1,5 +1,5 @@
 // app/api/analyze/route.ts
-// STREAMING - Envía resultados de cada agente en tiempo real (sin timeout)
+// STREAMING con agente de RESULTADOS CORRECTOS
 
 import { NextRequest } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
@@ -13,22 +13,39 @@ const AGENTS = [
     search: true,
     prompt: `Scout de datos para ${CASA_APUESTAS}. Busca TODO:
 - Odds 1X2, O/U 2.5, BTTS
-- Corners promedio de cada equipo
+- Promedio goles a favor y en contra de cada equipo (local/visitante)
 - Árbitro y su promedio de tarjetas
-- Tiros a portería promedio
-- H2H últimos 5 partidos
-- Forma y lesiones
+- xG (expected goals) si está disponible
+- H2H últimos 5 partidos CON MARCADORES EXACTOS
+- Forma últimos 5 y lesiones
 
 Formato compacto (máx 12 líneas).`
   },
   {
-    id: "corners",
-    name: "🚩 Corners",
+    id: "marcadores",
+    name: "🎯 Marcadores",
     search: false,
-    prompt: `Analista CORNERS. Con los datos:
-TOTAL ESPERADO: XX | OVER 9.5: XX% | OVER 10.5: XX%
-MEJOR APUESTA: [mercado] @ [cuota]
-(máx 3 líneas)`
+    prompt: `Especialista en RESULTADOS CORRECTOS (Correct Score).
+
+Con los datos del Scout, analiza:
+1. Promedio de goles de cada equipo (local/visitante)
+2. Resultados más frecuentes en H2H
+3. xG y tendencias de goles
+
+Calcula probabilidad de cada marcador usando:
+- Distribución de Poisson: P(x) = (λ^x × e^-λ) / x!
+- Donde λ = promedio goles esperados
+
+Formato:
+═══ MARCADORES MÁS PROBABLES ═══
+1. [X-X] → XX% prob | Cuota justa: X.XX
+2. [X-X] → XX% prob | Cuota justa: X.XX
+3. [X-X] → XX% prob | Cuota justa: X.XX
+4. [X-X] → XX% prob | Cuota justa: X.XX
+5. [X-X] → XX% prob | Cuota justa: X.XX
+
+VALOR: Si la casa paga más que la cuota justa = HAY VALOR
+MEJOR APUESTA: [marcador] @ [cuota casa] vs [cuota justa] → EV +XX%`
   },
   {
     id: "tarjetas",
@@ -74,11 +91,14 @@ VALOR OCULTO: [mercado que nadie ve]
     id: "matematico",
     name: "🧮 Matemático",
     search: false,
-    prompt: `Matemático. Calcula EV = (Prob × Cuota) - 1 para cada mercado.
-TOP 3:
-1. [mercado] @ [cuota] → EV +XX%
-2. [mercado] @ [cuota] → EV +XX%
-3. [mercado] @ [cuota] → EV +XX%`
+    prompt: `Matemático. Calcula EV = (Prob × Cuota) - 1 para TODOS los mercados incluyendo marcadores exactos.
+
+TOP 5 VALOR (incluyendo al menos 1 marcador exacto):
+1. [mercado/marcador] @ [cuota] → EV +XX%
+2. [mercado/marcador] @ [cuota] → EV +XX%
+3. [mercado/marcador] @ [cuota] → EV +XX%
+4. [mercado/marcador] @ [cuota] → EV +XX%
+5. [mercado/marcador] @ [cuota] → EV +XX%`
   },
   {
     id: "sintetizador",
@@ -86,15 +106,18 @@ TOP 3:
     search: false,
     prompt: `VEREDICTO FINAL:
 
-⚽ PREDICCIÓN: [resultado]
+⚽ PREDICCIÓN: [marcador exacto más probable]
 📊 CONFIANZA: XX%
 
-🏆 TOP 3 APUESTAS:
+🏆 TOP 3 APUESTAS SEGURAS:
 1️⃣ [MERCADO] @ [cuota] | EV +XX%
 2️⃣ [MERCADO] @ [cuota] | EV +XX%  
 3️⃣ [MERCADO] @ [cuota] | EV +XX%
 
-🚩 CORNERS: [recomendación]
+🎯 MARCADOR EXACTO CON VALOR:
+[X-X] @ [cuota] | Prob real: XX% | EV +XX%
+(Apostar solo X% del bankroll por ser alto riesgo)
+
 🟨 TARJETAS: [recomendación]
 🎯 DISPAROS: [recomendación]
 
@@ -106,7 +129,7 @@ TOP 3:
 async function callClaude(client: Anthropic, prompt: string, context: string, useSearch: boolean) {
   const params: any = {
     model: "claude-sonnet-4-20250514",
-    max_tokens: 800,
+    max_tokens: 900,
     messages: [{ role: "user", content: `${prompt}\n\n---\n\n${context}` }]
   };
   if (useSearch) {
@@ -137,7 +160,6 @@ export async function POST(request: NextRequest) {
       
       for (const agent of AGENTS) {
         try {
-          // Preparar contexto
           let context = "";
           if (agent.id === "scout") {
             context = `Partido: ${partido}\nCasa: ${CASA_APUESTAS}`;
@@ -150,11 +172,9 @@ export async function POST(request: NextRequest) {
             context = `DATOS:\n${results.scout || ""}\n\nPartido: ${partido}`;
           }
 
-          // Llamar a Claude
           const result = await callClaude(client, agent.prompt, context, agent.search);
           results[agent.id] = result;
 
-          // Enviar resultado al cliente
           const data = JSON.stringify({ 
             agentId: agent.id, 
             name: agent.name, 
